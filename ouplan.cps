@@ -16,20 +16,30 @@ By:X3msnake
 					- Add hasAutoTools (not working)
 31/DEC/2016 - V1 : First working version, tested @ LS Ouplan 2515
 
-					
+TODO: 
+- Add option to disable spindle rotation on export and alert user if the spindle is disabled
+- Add option to disable ATC 
+	- Set default machine tool number for tool override
+	- And alert user if more than one tool is trying to be exported
+- Add options documentation
+- CleanUp code
+	- Gather together all general functions
+	- Optimize Simplify and make core more readable
+	- Remove unused leftover references from GRBL
+- Make PP config and use tutorial
+
 */
 
 // TOC
 // 1. START POST-PROCESSING (header)
-// 1.1 is CAD file in same units as our GRBL configuration ?	
-// 1.2 is RadiusCompensation not set incorrectly ?	
-// 1.3 here you set all the properties of your machine, so they can be used later on
-// 1.4 Write Program Settings in comment form
-// 1.5 Write Tool blocks actions in comment form
-// 1.6 Set machine to a known state
+	// 1.1 is CAD file in same units as your machine configuration ?	
+	// 1.2 is RadiusCompensation not set incorrectly ?	
+	// 1.3 here you set all the properties of your machine, so they can be used later on
+	// 1.4 Write Program Settings in comment form
+	// 1.5 Write Tool blocks actions in comment form
+	// 1.6 Set machine to a known state
 // 2. POST COMMENTS
-// 3. FORCE USE ONLY 3 AXIS	
-// 3.1 FORCE USE ONLY 3 AXIS	
+// 3. FORCE PROGRAM G-CODE OUTPUT FUNCTIONS	
 // 4. POST SECTIONS
 	// 4.1 Validate and post CAM Set coordinate system
 	// 4.2 Move to set WCS zero
@@ -60,11 +70,11 @@ description = "OuplanXYZ - W/ARCS";
 legal = "Copyright (C) 2012-2016 by Autodesk, Inc.";
 certificationLevel = 2;
 
-extension = "nc";							// file extension of the gcode file
-setCodePage("ascii");						// character set of the gcode file
+extension = "nc";					// file extension of the gcode file
+setCodePage("ascii");					// character set of the gcode file
 
 capabilities = CAPABILITY_MILLING;			// intended for a CNC, so Milling
-tolerance = spatial(0.05, MM);				// (0.05mm) Ouplan's 2515 advertised accuracy 
+tolerance = spatial(0.05, MM);				// (0.05mm) Ouplan's 2515 advertised accuracy - This is the accuracy used when converting curves into segments
 minimumChordLength = spatial(0.01, MM);
 minimumCircularRadius = spatial(0.01, MM);
 maximumCircularRadius = spatial(1000, MM);
@@ -73,25 +83,25 @@ maximumCircularSweep = toRad(180);
 allowHelicalMoves = true;
 allowedCircularPlanes = undefined;
 
-var GRBLunits = MM;						// GRBL controller set to mm (Metric). Allows for a consistency check between GRBL settings and CAM file output
-										// var GRBLunits = IN;
+var GRBLunits = MM;					// set controller to mm (Metric). Allows for a consistency check between your machine settings and CAM file output
+// var GRBLunits = IN;					// set controller to inches (Imperial). Allows for a consistency check between your machine settings and CAM file output
 
 // user-defined properties : defaults are set, but they can be changed from a dialog box in Fusion when doing a post.
 properties =
 	{
 	spindleOnOffDelay: 0,				// time (in seconds) the spindle needs to get up to speed or stop
-	spindleTwoDirections : false,		// true : spindle can rotate clockwise and counterclockwise, will send M3 and M4. false : spindle can only go clockwise, will only send M3
-	hasCoolant : true,					// true : machine uses the coolant output, M8 M9 will be sent. false : coolant output not connected, so no M8 M9 will be sent
+	spindleTwoDirections : false,			// true : spindle can rotate clockwise and counterclockwise, will send M3 and M4. false : spindle can only go clockwise, will only send M3
+	hasCoolant : true,				// true : machine uses the coolant output, M8 M9 will be sent. false : coolant output not connected, so no M8 M9 will be sent
 	hasAutoTools : true,				// 
 	hasSpeedDial : false,				// true : the spindle is of type Makite RT0700, Dewalt 611 with a Dial to set speeds 1-6. false : other spindle
-	machineHomeZ : 150,					// absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
+	machineHomeZ : 150,				// absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
 	machineHomeX : 20,
 	machineHomeY : 20,
 	useFastMoves : true,				// false: G0 fast moves are replaced by G1 motion moves, usefull when testing to avoid crashing tools 
 	trimWhiteSpaces: false,				// true: compacts file by removing white spaces between commands
 	useLineNumbers: false,				// false: removes line numbering from the posted code
-	sequenceNumberStart: 10, 			// first sequence number
-    sequenceNumberIncrement: 10 		// increment for sequence numbers	
+	sequenceNumberStart: 10, 			// first sequence number (used if useLinenumbers:true)
+    	sequenceNumberIncrement: 10 			// increment for sequence numbers (used if useLinenumbers:true)	
 	};
 
 // creation of all kinds of G-code formats - controls the amount of decimals used in the generated G-Code
@@ -117,23 +127,22 @@ var iOutput = createReferenceVariable({prefix:"I"}, xyzFormat);
 var jOutput = createReferenceVariable({prefix:"J"}, xyzFormat);
 var kOutput = createReferenceVariable({prefix:"K"}, xyzFormat);
 
-var gMotionModal = createModal({}, gFormat); 											// modal group 1 // G0-G3, ...
-var gPlaneModal = createModal({onchange:function () {gMotionModal.reset();}}, gFormat); // modal group 2 // G17-19
-var gAbsIncModal = createModal({}, gFormat); 											// modal group 3 // G90-91
-var gFeedModeModal = createModal({}, gFormat); 											// modal group 5 // G93-94
-var gUnitModal = createModal({}, gFormat); 												// modal group 6 // G20-21
+var gMotionModal = createModal({}, gFormat); 							// modal group 1 // G0-G3, ...
+var gPlaneModal = createModal({onchange:function () {gMotionModal.reset();}}, gFormat); 	// modal group 2 // G17-19
+var gAbsIncModal = createModal({}, gFormat); 							// modal group 3 // G90-91
+var gFeedModeModal = createModal({}, gFormat); 							// modal group 5 // G93-94
+var gUnitModal = createModal({}, gFormat); 							// modal group 6 // G20-21
 
 function toTitleCase(str)
 	{
 	// function to reformat a string to 'title case'
-    return str.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();});
+	return str.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();});
 	}
 	
 function rpm2dial(rpm)
 	{
 	// translates an RPM for the spindle into a dial value, eg for the Makita RT0700 and Dewalt 611 routers
 	// additionaly, check that spindle rpm is between minimun and maximum of what our spindle can do
-
 	// array which maps spindle speeds to router dial settings,
 	// according to Makita RT0700 Manual : 1=10000, 2=12000, 3=17000, 4=22000, 5=27000, 6=30000
 	var speeds = [0, 10000, 12000, 17000, 22000, 27000, 30000];
@@ -164,7 +173,7 @@ function rpm2dial(rpm)
 	return 0;
 	}
 
-// Override Fusion Fucntions to assure correct formating o end of line carriage return/line feed
+// Override Fusion Functions to assure correct formating o end of line carriage return/line feed
 // As contributed by fonsecr on the forums: goo.gl/8Kog8l 
 function writeln(text) 
 {
@@ -182,18 +191,21 @@ function writeWords2()
 }
 // END override
 
-function writeBlock() {
-  if (properties.useLineNumbers) {
+function writeBlock()
+{
+  if (properties.useLineNumbers) 
+  {
     writeWords2(nFormat.format(sequenceNumber % 100000), arguments);
     sequenceNumber += properties.sequenceNumberIncrement;
-  } else {
+  } else 
+  {
     writeWords(arguments);
   }
 }
 
 function writeComment(text)
 	{
-	// Remove special characters which could confuse GRBL : $, !, ~, ?, (, )
+	// Normalize and Remove special characters from comments: $, !, ~, ?, (, )
 	// In order to make it simple, I replace everything which is not A-Z, 0-9, space, : , .
 	// Finally put everything between () as this is the way GRBL & UGCS expect comments
 	writeln("(" + String(text).replace(/[^a-zA-Z\d :=,.]+/g, " ") + ")");
@@ -203,7 +215,8 @@ function writeComment(text)
 // 1. START POST-PROCESSING (header)
 function onOpen()
 	{
-		if (properties.trimWhiteSpaces) { 
+		if (properties.trimWhiteSpaces) 
+		{ 
 			setWordSeparator("");
 		}
   
@@ -214,13 +227,13 @@ function onOpen()
 		{
 		if (GRBLunits == MM)
 			{
-			alert("Error", "GRBL configured to mm - CAD file sends Inches! - Change units in CAD/CAM software to mm");
-			error("Fatal Error : units mismatch between CADfile and GRBL setting");
+			alert("Error", "your machine configured to mm - CAD file sends Inches! - Change units in CAD/CAM software to mm");
+			error("Fatal Error : units mismatch between CADfile and your machine setting");
 			}
 		else
 			{
-			alert("Error", "GRBL configured to inches - CAD file sends mm! - Change units in CAD/CAM software to inches");
-			error("Fatal Error : units mismatch between CADfile and GRBL setting");
+			alert("Error", "your machine configured to inches - CAD file sends mm! - Change units in CAD/CAM software to inches");
+			error("Fatal Error : units mismatch between CADfile and your machine setting");
 			}
 		}
 
@@ -315,17 +328,12 @@ function onOpen()
 	writeln("");
 		
 // 1.6 Set machine to a known state 
-	// (M20/21)  Set inches / mm
-	// (G94) 	 Set Feed mm/min
-	// (G90) 	 Set Absolute Coordinates
-	// (G17) 	 Set Arc Plane XY
-	// (G40/G49) Disable tool radius and height offsets
-	// (G80) 	 Disable canned cycles
-	// writeBlock(gFeedModeModal.format(94));
-	// writeBlock(gAbsIncModal.format(90));
-	// writeBlock(gPlaneModal.format(17));
-	// writeBlock(gFeedModeModal.format(40), gFeedModeModal.format(49));
-	// writeBlock(gFeedModeModal.format(80));
+	// (M20/21)	Set inches / mm
+	// (G94) 	Set Feed mm/min
+	// (G90) 	Set Absolute Coordinates
+	// (G17) 	Set Arc Plane XY
+	// (G40/G49) 	Disable tool radius and height offsets
+	// (G80) 	Disable canned cycles
 	
 	var unit_modal
 	
@@ -350,7 +358,7 @@ function onComment(message)
 	writeComment(message);
 	}
 	
-// 3. FORCE USE ONLY 3 AXIS	
+// 3. FORCE PROGRAM G-CODE OUTPUT FUNCTIONS
 function forceXYZ()
 	{
 	xOutput.reset();
@@ -358,7 +366,6 @@ function forceXYZ()
 	zOutput.reset();
 	}
 	
-// 3.2 FORCE USE ONLY 3 AXIS	
 function forceAny()
 	{
 	forceXYZ();
@@ -416,12 +423,13 @@ function onSection()
 	// (T#)	Select Operation Block Tool
 	// (M6)	Automatic Load Tool
 	var tool = section.getTool();
-	var direction
+
 
 // 4.4 Start Spindle
 	// (S#) 	Spindle RPM Speed
 	// (M3/M4) 	Start Spindle CW/CCW 
-
+	var direction
+	
 	if (tool.clockwise)
 		{
 		tool_direction = 3;
@@ -441,11 +449,11 @@ function onSection()
 	// Wait some time for spindle to speed up - only on first section, as spindle is not powered down in-between sections
 	if(isFirstSection())
 		{
-		onDwell(properties.spindleOnOffDelay);
+		onDwell(properties.spindleOnOffDelay); // This section only shows up on the post if delay property is set above 0
 		}
 
 // 4.6 Start Coolant (M7/M8) Mist/Flood (M9) Disable Coolant 
-	// If the machine has coolant, write M8 or M9
+	// If the machine has coolant, write M8 else M9 in our case it starts the table vacum 
 	var table_vacum
 			
 	if (properties.hasCoolant)
@@ -471,8 +479,8 @@ function onSection()
     var remaining = currentSection.workPlane;
     if (!isSameDirection(remaining.forward, new Vector(0, 0, 1)))
 		{
-		alert("Error", "Tool-Rotation detected - GRBL ony supports 3 Axis");
-		error("Fatal Error in Operation " + (sectionId + 1) + ": Tool-Rotation detected but GRBL ony supports 3 Axis");
+		alert("Error", "Tool-Rotation detected - your machine ony supports 3 Axis");
+		error("Fatal Error in Operation " + (sectionId + 1) + ": Tool-Rotation detected but your machine ony supports 3 Axis");
 		}
     setRotation(remaining);
 
@@ -509,7 +517,7 @@ function onRadiusCompensation()
 	var sectionId = getCurrentSectionId();	
 	if (radComp != RADIUS_COMPENSATION_OFF)
 		{
-		alert("Error", "RadiusCompensation is not supported in GRBL - Change RadiusCompensation in CAD/CAM software to Off/Center/Computer");
+		alert("Error", "RadiusCompensation is not supported in your machine - Change RadiusCompensation in CAD/CAM software to Off/Center/Computer");
 		error("Fatal Error in Operation " + (sectionId + 1) + ": RadiusCompensation is found in CAD file but is not supported in GRBL");
 		return;
 		}
@@ -556,15 +564,15 @@ function onLinear(_x, _y, _z, feed)
 // 5.6 onRapid5D
 function onRapid5D(_x, _y, _z, _a, _b, _c)
 	{
-	alert("Error", "Tool-Rotation detected - GRBL ony supports 3 Axis");
-	error("Tool-Rotation detected but GRBL ony supports 3 Axis");
+	alert("Error", "Tool-Rotation detected - your machine ony supports 3 Axis");
+	error("Tool-Rotation detected but your machine ony supports 3 Axis");
 	}
 	
 // 5.7 onLinear5D
 function onLinear5D(_x, _y, _z, _a, _b, _c, feed)
 	{
-	alert("Error", "Tool-Rotation detected - GRBL ony supports 3 Axis");
-	error("Tool-Rotation detected but GRBL ony supports 3 Axis");
+	alert("Error", "Tool-Rotation detected - your machine ony supports 3 Axis");
+	error("Tool-Rotation detected but your machine ony supports 3 Axis");
 	}
 	
 // 5.8 onCircular
