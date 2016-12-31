@@ -1,26 +1,56 @@
 /*
 
-Custom Ouplan Post-Processor based on Stroom's OpenBuildsGRBL https://github.com/Strooom/GRBL-Post-Processor/wiki that in tur is based on the PP for http://openbuilds.com
+Custom Ouplan Post-Processor based on Stroom's OpenBuildsGRBL https://github.com/Strooom/GRBL-Post-Processor/wiki that in turn is based on the PP for http://openbuilds.com
 This post-Processor was developed for a Ouplan 2515 with automatic tool change should work in other Ouplan Milling Machines
 
 !THIS POST PROCESSOR IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND!
 !USE IT WISELY AND AT YOUR OWN RISK!
 
+Post Processor tuned for Ouplan 2515 for Lindo Serviço
+By:X3msnake
 
-
-22/AUG/2016 - V1 : Kick Off
-23/AUG/2016 - V2 : Added Machining Time to Operations overview at file header
-24/AUG/2016 - V3 : Added extra user properties - further cleanup of unused variables
-07/SEP/2016 - V4 : Added support for INCHES. Added a safe retract at beginning of first section
-11/OCT/2016 - V5
-27/DEC/2016 - V6 : Adaptation to Ouplan's G-Code Standard By:X3msnake
+27/DEC/2016 - V0.9 : Adaptation to Ouplan's G-Code Standard 
 					- Add fastmoves override
-					- Add hasAutoTools (not working)
 					- Add optional line numbers
 					- Add trim white space
+					- Add hasAutoTools (not working)
+31/DEC/2016 - V1 : First working version, tested @ LS Ouplan 2515
 
-> TABLE OF CONTENTS AT THE END OF THE FILE <					
+					
 */
+
+// TOC
+// 1. START POST-PROCESSING (header)
+// 1.1 is CAD file in same units as our GRBL configuration ?	
+// 1.2 is RadiusCompensation not set incorrectly ?	
+// 1.3 here you set all the properties of your machine, so they can be used later on
+// 1.4 Write Program Settings in comment form
+// 1.5 Write Tool blocks actions in comment form
+// 1.6 Set machine to a known state
+// 2. POST COMMENTS
+// 3. FORCE USE ONLY 3 AXIS	
+// 3.1 FORCE USE ONLY 3 AXIS	
+// 4. POST SECTIONS
+	// 4.1 Validate and post CAM Set coordinate system
+	// 4.2 Move to set WCS zero
+	// 4.3 Load/Change Tool
+	// 4.4 Start Spindle
+	// 4.5 Wait for tool ready	
+	// 4.6 Start Coolant (M7/M8) Mist/Flood (M9) Disable Coolant 
+	// 4.7 forceXYZ
+	// 4.8 forceAny
+	// 4.9 Rapid Move to section Initial Position
+// 5 OTHER FUNCTIONS
+	// 5.1 OnDwell
+	// 5.2 OnSpindleSpeed
+	// 5.3 onRadiusCompensation
+	// 5.4 onRapid
+	// 5.5 onLinear
+	// 5.6 onRapid5D
+	// 5.7 onLinear5D	
+	// 5.8 onCircular
+	// 5.8 onSectionEnd
+// 6 END POST-PROCESSING (footer)
 
 description = "OuplanXYZ - W/ARCS";
 vendor = "Ouplan";
@@ -32,7 +62,6 @@ certificationLevel = 2;
 
 extension = "nc";							// file extension of the gcode file
 setCodePage("ascii");						// character set of the gcode file
-//setEOL(CRLF);								// end-of-line type : use CRLF for windows
 
 capabilities = CAPABILITY_MILLING;			// intended for a CNC, so Milling
 tolerance = spatial(0.05, MM);				// (0.05mm) Ouplan's 2515 advertised accuracy 
@@ -55,7 +84,7 @@ properties =
 	hasCoolant : true,					// true : machine uses the coolant output, M8 M9 will be sent. false : coolant output not connected, so no M8 M9 will be sent
 	hasAutoTools : true,				// 
 	hasSpeedDial : false,				// true : the spindle is of type Makite RT0700, Dewalt 611 with a Dial to set speeds 1-6. false : other spindle
-	machineHomeZ : 230,					// absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
+	machineHomeZ : 150,					// absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
 	machineHomeX : 20,
 	machineHomeY : 20,
 	useFastMoves : true,				// false: G0 fast moves are replaced by G1 motion moves, usefull when testing to avoid crashing tools 
@@ -66,13 +95,13 @@ properties =
 	};
 
 // creation of all kinds of G-code formats - controls the amount of decimals used in the generated G-Code
-var nFormat = createFormat({prefix:"N", decimals:0}); // Used for line Number
-var sequenceNumber = properties.sequenceNumberStart;  // Set line counter
-var gFormat = createFormat({prefix:"G", decimals:0}); // Used for motion and coordinate manipulation
-var mFormat = createFormat({prefix:"M", decimals:0}); // Used for machine actions and activations
-var tFormat = createFormat({prefix:"T", decimals:0}); // Used for tools
+var nFormat = createFormat({prefix:"N", decimals:0}); 	// Used for line Number
+var sequenceNumber = properties.sequenceNumberStart;  	// Set line counter
+var gFormat = createFormat({prefix:"G", decimals:0}); 	// Used for motion and coordinate manipulation
+var mFormat = createFormat({prefix:"M", decimals:0}); 	// Used for machine actions and activations
+var tFormat = createFormat({prefix:"T", decimals:0}); 	// Used for tools
 
-var xyzFormat = createFormat({decimals:(unit == MM ? 3 : 4), forceDecimal:true});
+var xyzFormat = createFormat({decimals:(unit == MM ? 3 : 4)});
 var feedFormat = createFormat({decimals:0});
 var rpmFormat = createFormat({decimals:0});
 var secFormat = createFormat({decimals:1, forceDecimal:true});
@@ -134,6 +163,24 @@ function rpm2dial(rpm)
 	error("Fatal Error calculating router speed dial");
 	return 0;
 	}
+
+// Override Fusion Fucntions to assure correct formating o end of line carriage return/line feed
+// As contributed by fonsecr on the forums: goo.gl/8Kog8l 
+function writeln(text) 
+{
+  write(text + "\r\n");
+}
+
+function writeWords() 
+{
+  writeln(formatWords(arguments));
+}
+
+function writeWords2()
+{
+  writeln(formatWords(arguments));
+}
+// END override
 
 function writeBlock() {
   if (properties.useLineNumbers) {
@@ -201,6 +248,7 @@ function onOpen()
 
 // 1.4 Write Program Settings in comment form
 	writeln("%");
+	writeln(":1248");
 
 	var productName = getProduct(); 						// var from the CAM software
 	writeComment("Made in : " + productName);
@@ -238,7 +286,7 @@ function onOpen()
 			}
 
 		writeComment("  Work Coordinate System : G" + (section.workOffset + 53));
-		writeComment("  Tool : " + toTitleCase(getToolTypeName(tool.type)) + " " + tool.numberOfFlutes + " Flutes, Diam = " + xyzFormat.format(tool.diameter) + "mm, Len = " + tool.fluteLength + "mm");
+		writeComment("  Tool("+ tool.number +"):"+ toTitleCase(getToolTypeName(tool.type)) + " " + tool.numberOfFlutes + " Flutes, Diam = " + xyzFormat.format(tool.diameter) + "mm, Len = " + tool.fluteLength + "mm");
 		if (properties.hasSpeedDial)
 			{
 			writeComment("  Spindle : RPM = " + rpm + ", set router dial to " + rpm2dial(rpm));
@@ -273,22 +321,25 @@ function onOpen()
 	// (G17) 	 Set Arc Plane XY
 	// (G40/G49) Disable tool radius and height offsets
 	// (G80) 	 Disable canned cycles
+	// writeBlock(gFeedModeModal.format(94));
+	// writeBlock(gAbsIncModal.format(90));
+	// writeBlock(gPlaneModal.format(17));
+	// writeBlock(gFeedModeModal.format(40), gFeedModeModal.format(49));
+	// writeBlock(gFeedModeModal.format(80));
+	
+	var unit_modal
 	
 	switch (unit)
 		{
 		case IN:
-			writeBlock(gUnitModal.format(20));
+			unit_modal = 20;
 			break;
 		case MM:
-			writeBlock(gUnitModal.format(21));
+			unit_modal = 21;
 			break;
 		}
 		
-	writeBlock(gFeedModeModal.format(94));
-	writeBlock(gAbsIncModal.format(90));
-	writeBlock(gPlaneModal.format(17));
-	writeBlock(gFeedModeModal.format(40), gFeedModeModal.format(49));
-	writeBlock(gFeedModeModal.format(80));
+	writeBlock(gFeedModeModal.format(40), gPlaneModal.format(17),gFeedModeModal.format(80),gFeedModeModal.format(49),gFeedModeModal.format(unit_modal));
 
 	writeln("");
 	}
@@ -330,32 +381,42 @@ function onSection()
 	writeComment(comment);
 	writeln("");
 
-	
-// 4.1 Safe Move to Absolute Machine Z Coordinates Set on the CAM Properties panel
-	// To be safe (after jogging to whatever position), move the spindle up to a safe home position before going to the inital position
-	// At end of a section, spindle is retrated to clearance height, so it is only needed on the first section
-	// it is done with G53 - machine coordinates, so I put it in front of anything else
-	if(isFirstSection())
-		{
-		writeBlock(gAbsIncModal.format(90), gFormat.format(53), gFormat.format(properties.useFastMoves ? 0 : 1), "Z" + xyzFormat.format(properties.machineHomeZ));	// Retract spindle to Machine Z Home
-		}
-
-// 4.2 Validate and post CAM Set coordinate system
+// 4.1 Validate and post CAM Set coordinate system
 	// Write the WCS, ie. G54 or higher.. default to WCS1 / G54 if no or invalid WCS in order to prevent using Machine Coordinates G53
 	if ((section.workOffset < 1) || (section.workOffset > 6))
 		{
 		alert("Warning", "Invalid Work Coordinate System. Select WCS 1..6 in CAM software. Selecting default WCS1/G54");
 		section.workOffset = 1;	// If no WCS is set (or out of range), then default to WCS1 / G54
 		}
-	writeBlock(gFormat.format(53 + section.workOffset));
-
+	if (section.workOffset > 1 && isFirstSection())
+		{
+		var definedWCS = 53 + section.workOffset;
+		alert("Warning","Warning!\n Coordinate system set as G"+ definedWCS +"!");
+		// writeComment("MSG Coordenadas G"+ definedWCS +" em uso!"); // print msg to machine
+		// onDwell(5);
+		// writeComment("MSG"); // close message
+		// writeln("");
+		}
+	if (section.workOffset == 1 && isFirstSection())
+		{
+		var definedWCS = 53 + section.workOffset;
+		alert("Warning","You are using G"+ definedWCS +"!");
+		}
 	
+// 4.2 Move to set WCS zero
+	// To be safe (after jogging to whatever position), move the spindle up to a safe home position before going to the inital position
+	if(isFirstSection())
+		{
+		writeBlock(gAbsIncModal.format(90), gFormat.format(53 + section.workOffset));	// Change coordinate System
+		writeBlock(gFormat.format(properties.useFastMoves ? 0 : 1), xOutput.format(0),yOutput.format(0));	// Go to new coordinate System's XY 0 
+		writeln("");
+		}
 	
 // 4.3 Load/Change Tool
 	// (T#)	Select Operation Block Tool
 	// (M6)	Automatic Load Tool
-		var tool = section.getTool();
-		writeBlock(tFormat.format(tool.number), mFormat.format(6));
+	var tool = section.getTool();
+	var direction
 
 // 4.4 Start Spindle
 	// (S#) 	Spindle RPM Speed
@@ -363,11 +424,11 @@ function onSection()
 
 	if (tool.clockwise)
 		{
-		writeBlock(sOutput.format(tool.spindleRPM), mFormat.format(3));
+		tool_direction = 3;
 		}
 	else if (properties.spindleTwoDirections)
 		{
-		writeBlock(sOutput.format(tool.spindleRPM), mFormat.format(4));
+		tool_direction = 4; 
 		}
 	else
 		{
@@ -385,17 +446,24 @@ function onSection()
 
 // 4.6 Start Coolant (M7/M8) Mist/Flood (M9) Disable Coolant 
 	// If the machine has coolant, write M8 or M9
+	var table_vacum
+			
 	if (properties.hasCoolant)
 		{
 		if (tool.coolant)
 			{
-			writeBlock(mFormat.format(8));		
+			table_vacum = 8;		
 			}
 		else
 			{
-			writeBlock(mFormat.format(9));		
+			table_vacum = 9;		
 			}
 		}
+
+	if (isFirstSection()||(tool.number != getPreviousSection().getTool().number)) // Skipping posting instructions when the new operation is using the same tool number
+	{
+		writeBlock(tFormat.format(tool.number), mFormat.format(6), mFormat.format(table_vacum), mFormat.format(tool_direction),sOutput.format(tool.spindleRPM));
+	}
 	
 // 4.7 forceXYZ
 	forceXYZ();
@@ -412,11 +480,9 @@ function onSection()
 	forceAny();
 
 // 4.9 Rapid Move to section Initial Position
-	// First XY, then Z
 	var initialPosition = getFramePosition(currentSection.getInitialPosition());
-	writeBlock(gFormat.format(properties.useFastMoves ? 0 : 1), xOutput.format(initialPosition.x), yOutput.format(initialPosition.y));
-	writeBlock(gAbsIncModal.format(90), gFormat.format(properties.useFastMoves ? 0 : 1), zOutput.format(initialPosition.z));
 	
+	writeBlock(gFormat.format(properties.useFastMoves ? 0 : 1), xOutput.format(initialPosition.x), yOutput.format(initialPosition.y),zOutput.format(initialPosition.z));
 	}
 
 // 5 OTHER FUNCTIONS
@@ -424,7 +490,7 @@ function onSection()
 // 5.1 OnDwell
 function onDwell(seconds)
 	{
-	if (properties.spindleOnOffDelay > 0 )
+	if (seconds > 0 )
 		{
 		writeBlock(gFormat.format(4), "P" + secFormat.format(seconds));
 		}
@@ -563,45 +629,9 @@ function onClose()
 		{
 		writeBlock(mFormat.format(9));																				// Stop Coolant
 		}
-	writeBlock(gAbsIncModal.format(90), gFormat.format(53), gFormat.format(properties.useFastMoves ? 0 : 1), "Z" + xyzFormat.format(properties.machineHomeZ));	// Retract spindle to Machine Z Home
-	writeBlock(mFormat.format(5));																					// Stop Spindle
+	writeBlock(gFormat.format(53), gFormat.format(properties.useFastMoves ? 0 : 1), "Z" + xyzFormat.format(properties.machineHomeZ));	// Retract spindle to Machine Z Home																				// Stop Spindle
 	onDwell(properties.spindleOnOffDelay);																			// Wait for spindle to stop
-	writeBlock(gAbsIncModal.format(90), gFormat.format(53), gFormat.format(properties.useFastMoves ? 0 : 1), "X" + xyzFormat.format(properties.machineHomeX), "Y" + xyzFormat.format(properties.machineHomeY));	// Return to home position
+	writeBlock(gFormat.format(53), gFormat.format(properties.useFastMoves ? 0 : 1), "X" + xyzFormat.format(properties.machineHomeX), "Y" + xyzFormat.format(properties.machineHomeY));	// Return to home position
 	writeBlock(mFormat.format(30));																					// Program End
-	writeln("%");																									// Punch-Tape End
+	writeln("%");	// Punch-Tape End
 	}
-	
-
-// TOC
-// 1. START POST-PROCESSING (header)
-// 1.1 is CAD file in same units as our GRBL configuration ?	
-// 1.2 is RadiusCompensation not set incorrectly ?	
-// 1.3 here you set all the properties of your machine, so they can be used later on
-// 1.4 Write Program Settings in comment form
-// 1.5 Write Tool blocks actions in comment form
-// 1.6 Set machine to a known state
-// 2. POST COMMENTS
-// 3. FORCE USE ONLY 3 AXIS	
-// 3.1 FORCE USE ONLY 3 AXIS	
-// 4. POST SECTIONS
-	// 4.1 Safe Move to Absolute Machine Z Coordinates Set on the CAM Properties panel
-	// 4.2 Validate and post CAM Set coordinate system
-	// 4.3 Load/Change Tool
-	// 4.4 Start Spindle
-	// 4.5 Wait for tool ready	
-	// 4.6 Start Coolant (M7/M8) Mist/Flood (M9) Disable Coolant 
-	// 4.7 forceXYZ
-	// 4.8 forceAny
-	// 4.9 Rapid Move to section Initial Position
-// 5 OTHER FUNCTIONS
-	// 5.1 OnDwell
-	// 5.2 OnSpindleSpeed
-	// 5.3 onRadiusCompensation
-	// 5.4 onRapid
-	// 5.5 onLinear
-	// 5.6 onRapid5D
-	// 5.7 onLinear5D	
-	// 5.8 onCircular
-	// 5.8 onSectionEnd
-// 6 END POST-PROCESSING (footer)
-
