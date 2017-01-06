@@ -15,6 +15,8 @@ By:X3msnake
 					- Add trim white space
 					- Add hasAutoTools (not working)
 31/DEC/2016 - V1 : First working version, tested @ LS Ouplan 2515
+06/JAN/2017				- Add force GMove Output Reset to forceAny function
+					- Add forceAnyFunction to onRapidMove to force full modal move and feed output after a rapid move
 
 TODO: 
 - Add option to disable spindle rotation on export and alert user if the spindle is disabled
@@ -366,8 +368,9 @@ function forceXYZ()
 	zOutput.reset();
 	}
 	
-function forceAny()
+function forceAny() 						// when called resets modal memory and forces next line posting of move type, coordinates and feed
 	{
+	gMotionModal.reset();
 	forceXYZ();
 	feedOutput.reset();
 	}
@@ -532,7 +535,7 @@ function onRapid(_x, _y, _z)
 	if (x || y || z)
 		{
 		writeBlock(gFormat.format(properties.useFastMoves ? 0 : 1), x, y, z);
-		feedOutput.reset();
+		forceAny();
 		}
 	}
 
