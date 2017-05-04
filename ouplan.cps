@@ -10,14 +10,14 @@ Post Processor tuned for Ouplan 2515 for Lindo Serviço
 By:X3msnake
 
 27/DEC/2016 - V0.9 : Adaptation to Ouplan's G-Code Standard 
-					- Add fastmoves override
-					- Add optional line numbers
-					- Add trim white space
-					- Add hasAutoTools (not working)
+				- Add fastmoves override
+				- Add optional line numbers
+				- Add trim white space
+				- Add hasAutoTools (not working)
 31/DEC/2016 - V1 : First working version, tested @ LS Ouplan 2515
 06/JAN/2017			- Add force GMove Output Reset to forceAny function
-					- Add forceAnyFunction to onRapidMove to force full modal move and feed output after a rapid move
-04/MAI/2017			- Fix WCS Vadidation, it now posts coordinates as G54 if the WCS if the user sets it out of range
+				- Add forceAnyFunction to onRapidMove to force full modal move and feed output after a rapid move
+04/MAI/2017			- Fix WCS Validation, it now posts coordinates as G54 if the WCS if the user sets it out of range
 
 
 TODO: 
