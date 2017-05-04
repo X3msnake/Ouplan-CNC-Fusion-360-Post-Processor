@@ -15,8 +15,10 @@ By:X3msnake
 					- Add trim white space
 					- Add hasAutoTools (not working)
 31/DEC/2016 - V1 : First working version, tested @ LS Ouplan 2515
-06/JAN/2017				- Add force GMove Output Reset to forceAny function
+06/JAN/2017			- Add force GMove Output Reset to forceAny function
 					- Add forceAnyFunction to onRapidMove to force full modal move and feed output after a rapid move
+04/MAI/2017			- Fix WCS Vadidation, it now posts coordinates as G54 if the WCS if the user sets it out of range
+
 
 TODO: 
 - Add option to disable spindle rotation on export and alert user if the spindle is disabled
@@ -105,6 +107,9 @@ properties =
 	sequenceNumberStart: 10, 			// first sequence number (used if useLinenumbers:true)
     	sequenceNumberIncrement: 10 			// increment for sequence numbers (used if useLinenumbers:true)	
 	};
+
+// Set machine coordinates WCS number
+var definedWCS = 53;
 
 // creation of all kinds of G-code formats - controls the amount of decimals used in the generated G-Code
 var nFormat = createFormat({prefix:"N", decimals:0}); 	// Used for line Number
@@ -392,32 +397,34 @@ function onSection()
 	writeln("");
 
 // 4.1 Validate and post CAM Set coordinate system
-	// Write the WCS, ie. G54 or higher.. default to WCS1 / G54 if no or invalid WCS in order to prevent using Machine Coordinates G53
-	if ((section.workOffset < 1) || (section.workOffset > 6))
+	// Write the WCS, ie. G54 or higher in order to prevent using Machine Coordinates G53.
+
+    if (section.workOffset == 1 && isFirstSection())
 		{
-		alert("Warning", "Invalid Work Coordinate System. Select WCS 1..6 in CAM software. Selecting default WCS1/G54");
-		section.workOffset = 1;	// If no WCS is set (or out of range), then default to WCS1 / G54
-		}
-	if (section.workOffset > 1 && isFirstSection())
-		{
-		var definedWCS = 53 + section.workOffset;
+		definedWCS = 53 + section.workOffset;
 		alert("Warning","Warning!\n Coordinate system set as G"+ definedWCS +"!");
-		// writeComment("MSG Coordenadas G"+ definedWCS +" em uso!"); // print msg to machine
-		// onDwell(5);
-		// writeComment("MSG"); // close message
-		// writeln("");
 		}
-	if (section.workOffset == 1 && isFirstSection())
-		{
-		var definedWCS = 53 + section.workOffset;
-		alert("Warning","You are using G"+ definedWCS +"!");
-		}
-	
+        else if ((section.workOffset < 1) || (section.workOffset > 6) && isFirstSection())
+            {
+            
+            definedWCS = 54;	// If WCS is out of range, default to WCS1/G54
+            alert("Warning","Setup>Post_Process>WCS_Offset set as "+section.workOffset+"\nAllowed range is 1(G54) to 6(G59).\nDefaulting post coordinates to G"+ definedWCS +" for safety reasons!");
+            }
+        else if (section.workOffset > 1 && isFirstSection())
+            {
+            definedWCS = 53 + section.workOffset;
+            alert("Warning","Warning!\n Coordinate system set as G"+ definedWCS +"!");
+            // writeComment("MSG Coordenadas G"+ definedWCS +" em uso!"); // print msg to machine
+            // onDwell(5);
+            // writeComment("MSG"); // close message
+            // writeln("");
+            }
+
 // 4.2 Move to set WCS zero
 	// To be safe (after jogging to whatever position), move the spindle up to a safe home position before going to the inital position
 	if(isFirstSection())
 		{
-		writeBlock(gAbsIncModal.format(90), gFormat.format(53 + section.workOffset));	// Change coordinate System
+		writeBlock(gAbsIncModal.format(90), gFormat.format(definedWCS));	// Change coordinate System
 		writeBlock(gFormat.format(properties.useFastMoves ? 0 : 1), xOutput.format(0),yOutput.format(0));	// Go to new coordinate System's XY 0 
 		writeln("");
 		}
