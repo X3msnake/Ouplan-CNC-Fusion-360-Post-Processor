@@ -10,21 +10,20 @@ Post Processor tuned for Ouplan 2515 for Lindo Serviço
 By:X3msnake
 
 27/DEC/2016 - V0.9 : Adaptation to Ouplan's G-Code Standard 
-				- Add fastmoves override
-				- Add optional line numbers
-				- Add trim white space
-				- Add hasAutoTools (not working)
+					- Add fastmoves override
+					- Add optional line numbers
+					- Add trim white space
+					- Add hasAutoTools (not working)
 31/DEC/2016 - V1 : First working version, tested @ LS Ouplan 2515
 06/JAN/2017			- Add force GMove Output Reset to forceAny function
-				- Add forceAnyFunction to onRapidMove to force full modal move and feed output after a rapid move
-04/MAI/2017			- Fix WCS Validation, it now posts coordinates as G54 if the WCS if the user sets it out of range
+					- Add forceAnyFunction to onRapidMove to force full modal move and feed output after a rapid move
+04/MAI/2017			- Fix WCS Vadidation, it now posts coordinates as G54 if the WCS if the user sets it out of range
+12/MAI/2017			- Add option to disable ATC and override any tool number to T1
 
 
 TODO: 
 - Add option to disable spindle rotation on export and alert user if the spindle is disabled
-- Add option to disable ATC 
-	- Set default machine tool number for tool override
-	- And alert user if more than one tool is trying to be exported
+- Alert users with no ATC if more than one tool is trying to be exported in the same file
 - Add options documentation
 - CleanUp code
 	- Gather together all general functions
@@ -94,18 +93,18 @@ var GRBLunits = MM;					// set controller to mm (Metric). Allows for a consisten
 properties =
 	{
 	spindleOnOffDelay: 0,				// time (in seconds) the spindle needs to get up to speed or stop
-	spindleTwoDirections : false,			// true : spindle can rotate clockwise and counterclockwise, will send M3 and M4. false : spindle can only go clockwise, will only send M3
-	hasCoolant : true,				// true : machine uses the coolant output, M8 M9 will be sent. false : coolant output not connected, so no M8 M9 will be sent
-	hasAutoTools : true,				// 
-	hasSpeedDial : false,				// true : the spindle is of type Makite RT0700, Dewalt 611 with a Dial to set speeds 1-6. false : other spindle
-	machineHomeZ : 150,				// absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
+	spindleTwoDirections : false,		// true : spindle can rotate clockwise and counterclockwise, will send M3 and M4. false : spindle can only go clockwise, will only send M3
+	hasAutomaticToolChange : true,				// false: disables Tool Changes and Overrides any tool number to T01
+	hasCoolant : true,                  // true : machine uses the coolant output, M8 M9 will be sent. false : coolant output not connected, so no M8 M9 will be sent
+    // hasSpeedDial : false,				// true : the spindle is of type Makite RT0700, Dewalt 611 with a Dial to set speeds 1-6. false : other spindle
+	machineHomeZ : 150,				    // absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
 	machineHomeX : 20,
 	machineHomeY : 20,
 	useFastMoves : true,				// false: G0 fast moves are replaced by G1 motion moves, usefull when testing to avoid crashing tools 
 	trimWhiteSpaces: false,				// true: compacts file by removing white spaces between commands
 	useLineNumbers: false,				// false: removes line numbering from the posted code
 	sequenceNumberStart: 10, 			// first sequence number (used if useLinenumbers:true)
-    	sequenceNumberIncrement: 10 			// increment for sequence numbers (used if useLinenumbers:true)	
+    sequenceNumberIncrement: 10 			// increment for sequence numbers (used if useLinenumbers:true)	
 	};
 
 // Set machine coordinates WCS number
@@ -335,12 +334,12 @@ function onOpen()
 	writeln("");
 		
 // 1.6 Set machine to a known state 
-	// (M20/21)	Set inches / mm
-	// (G94) 	Set Feed mm/min
-	// (G90) 	Set Absolute Coordinates
-	// (G17) 	Set Arc Plane XY
-	// (G40/G49) 	Disable tool radius and height offsets
-	// (G80) 	Disable canned cycles
+	// (M20/21)	 Set inches / mm
+	// (G94) 	 Set Feed mm/min
+	// (G90) 	 Set Absolute Coordinates
+	// (G17) 	 Set Arc Plane XY
+	// (G40/G49) Disable tool radius and height offsets
+	// (G80) 	 Disable canned cycles
 	
 	var unit_modal
 	
@@ -432,7 +431,7 @@ function onSection()
 // 4.3 Load/Change Tool
 	// (T#)	Select Operation Block Tool
 	// (M6)	Automatic Load Tool
-	var tool = section.getTool();
+        var tool = section.getTool();
 
 
 // 4.4 Start Spindle
@@ -477,10 +476,20 @@ function onSection()
 			table_vacum = 9;		
 			}
 		}
+        
+// If the user defines his machine as having no ATC > Set default tool to T1
+    if (properties.hasAutomaticToolChange)
+        {
+        var validateToolNumber = tool.number;
+        } 
+    else
+        {
+        var validateToolNumber = 1;
+        }
 
 	if (isFirstSection()||(tool.number != getPreviousSection().getTool().number)) // Skipping posting instructions when the new operation is using the same tool number
 	{
-		writeBlock(tFormat.format(tool.number), mFormat.format(6), mFormat.format(table_vacum), mFormat.format(tool_direction),sOutput.format(tool.spindleRPM));
+		writeBlock(tFormat.format(validateToolNumber), mFormat.format(6), mFormat.format(table_vacum), mFormat.format(tool_direction),sOutput.format(tool.spindleRPM));
 	}
 	
 // 4.7 forceXYZ
