@@ -13,6 +13,9 @@ http://a360.co/2iyOxWR
 - [ACR - Acrilic](http://a360.co/2pdoWIy)
 - [EPS - Expanded Polyestirene](http://a360.co/2psJxte)
 - [MAD - Wood](http://a360.co/2pt0xzA)
+- [POM - Polyoxymethylene](https://a360.co/3vnTwju)
+- [PHE - Phenolic](https://a360.co/3vm5Z7n)
+- [ALU - Aluminium](https://a360.co/3jnrLVx)
 - [Tool Holders](http://a360.co/2pafF26)
 
 ---
