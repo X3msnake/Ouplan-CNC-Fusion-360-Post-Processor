@@ -19,4 +19,4 @@ http://a360.co/2iyOxWR
 - [Tool Holders](http://a360.co/2pafF26)
 
 ---
-Documentation on Fusion Post Processor editing can be found in https://github.com/AutodeskCAM/Documentation
+Documentation on Fusion Post Processor editing can be found in [https://cam.autodesk.com/posts/posts/guides/Post%20Processor%20Training%20Guide.pdf]
